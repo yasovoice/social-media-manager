@@ -2,11 +2,26 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ============================================================
-// KONFIGURATION — Diese 3 Werte in Supabase eintragen
+// KONFIGURATION
 // ============================================================
 const SUPABASE_URL = "https://dylovzxziqgctuwdvvea.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5bG92enh6aXFnY3R1d2R2dmVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTQyOTIsImV4cCI6MjA5NTg5MDI5Mn0.E4W4PUjJLj7icvppLZQKxQnTtDr4ZzEBpb9OUKqCT_s";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================================================
+// ZUGANGSCODES — hier neue Codes hinzufügen
+// Format: "CODE": "Kundenname"
+// ============================================================
+const ACCESS_CODES = {
+  "YASO2026": "Yaso",
+  "FEUER2026": "Testuser",
+  "SMM2026": "Kunde1",
+  "CREATOR01": "Kunde2",
+  "BRAND2026": "Kunde3",
+  "HOOK2026": "Kunde4",
+  "ABC2026": "Kunde5",
+};
+
 
 // ============================================================
 // MODULE
@@ -462,16 +477,15 @@ Input: ${input}`,
 // HAUPTKOMPONENTE
 // ============================================================
 export default function App() {
-  const [session, setSession] = useState(null);
+  const [userId, setUserId] = useState(() => localStorage.getItem("smm_user_id") || null);
+  const [userName, setUserName] = useState(() => localStorage.getItem("smm_user_name") || null);
   const [profile, setProfile] = useState(null);
   const [activeModule, setActiveModule] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [authMode, setAuthMode] = useState("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
@@ -482,26 +496,39 @@ export default function App() {
   const bottomRef = useRef(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        loadProfile(session.user.id);
-        loadPinnedMessage();
-      }
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        loadProfile(session.user.id);
-        loadPinnedMessage();
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    if (userId) {
+      loadProfile(userId);
+      loadPinnedMessage();
+    }
+  }, [userId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  function handleCodeLogin() {
+    const code = codeInput.toUpperCase().trim();
+    if (ACCESS_CODES[code]) {
+      const name = ACCESS_CODES[code];
+      localStorage.setItem("smm_user_id", code);
+      localStorage.setItem("smm_user_name", name);
+      setUserId(code);
+      setUserName(name);
+      setCodeError(false);
+    } else {
+      setCodeError(true);
+      setCodeInput("");
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("smm_user_id");
+    localStorage.removeItem("smm_user_name");
+    setUserId(null);
+    setUserName(null);
+    setProfile(null);
+    setMessages([]);
+  }
 
   async function loadProfile(userId) {
     const { data } = await supabase.from("profiles").select("*").eq("user_id", userId).single();
@@ -514,9 +541,9 @@ export default function App() {
   }
 
   async function sendFeedback() {
-    if (!feedbackText.trim() || !session) return;
+    if (!feedbackText.trim() || !userId) return;
     await supabase.from("feedback").insert({
-      user_id: session.user.id,
+      user_id: userId,
       nachricht: feedbackText,
       modul: activeModule || "allgemein"
     });
@@ -526,15 +553,16 @@ export default function App() {
   }
 
   async function saveProfile(data) {
-    if (!session) return;
+    if (!userId) return;
     setSaving(true);
     const { error } = await supabase.from("profiles").upsert({
-      user_id: session.user.id,
+      user_id: userId,
+      name: userName,
       ...data,
       updated_at: new Date().toISOString()
     });
     if (!error) {
-      await loadProfile(session.user.id);
+      await loadProfile(userId);
       setSaveMsg("✓ Profil gespeichert!");
     } else {
       setSaveMsg("❌ Fehler beim Speichern");
@@ -597,41 +625,31 @@ export default function App() {
   }
 
   // ============================================================
-  // LOGIN SCREEN
+  // LOGIN SCREEN — ZUGANGSCODE
   // ============================================================
-  if (!session) return (
+  if (!userId) return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f 0%, #1a1025 50%, #0d1a2e 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
         * { box-sizing: border-box; }
         ::placeholder { color: rgba(255,255,255,0.25); }
       `}</style>
-      <div style={{ width: "100%", maxWidth: "420px", padding: "0 20px" }}>
-        <div style={{ textAlign: "center", marginBottom: "40px" }}>
-          <div style={{ fontSize: "48px", marginBottom: "12px" }}>🔥</div>
-          <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "32px", color: "#fff", margin: "0 0 8px", fontWeight: "400", letterSpacing: "-0.5px" }}>Social Media Manager</h1>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", margin: 0 }}>4 Feuer Methode · KI-powered · 2026</p>
+      <div style={{ width: "100%", maxWidth: "380px", padding: "0 20px" }}>
+        <div style={{ textAlign: "center", marginBottom: "36px" }}>
+          <div style={{ fontSize: "52px", marginBottom: "12px" }}>🔥</div>
+          <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "30px", color: "#fff", margin: "0 0 6px", fontWeight: "400" }}>Social Media Manager</h1>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "13px", margin: 0 }}>4 Feuer Methode · KI-powered · 2026</p>
         </div>
-        <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "24px", padding: "32px 28px" }}>
-          <div style={{ display: "flex", marginBottom: "24px", background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "4px" }}>
-            {["login","signup"].map(mode => (
-              <button key={mode} onClick={() => { setAuthMode(mode); setAuthError(""); }}
-                style={{ flex: 1, padding: "10px", border: "none", borderRadius: "9px", cursor: "pointer", fontSize: "13px", fontWeight: "500", fontFamily: "inherit", background: authMode === mode ? "rgba(255,255,255,0.12)" : "transparent", color: authMode === mode ? "#fff" : "rgba(255,255,255,0.4)", transition: "all 0.2s" }}>
-                {mode === "login" ? "Einloggen" 
-              </button>
-            ))}
-          </div>
-          <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAuth()} type="email" placeholder="E-Mail Adresse"
-            style={{ width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "#fff", fontSize: "14px", fontFamily: "inherit", outline: "none", marginBottom: "10px" }} />
-          <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAuth()} type="password" placeholder="Passwort"
-            style={{ width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "#fff", fontSize: "14px", fontFamily: "inherit", outline: "none", marginBottom: "16px" }} />
-          {authError && <p style={{ color: authError.startsWith("✓") ? "#10B981" : "#F87171", fontSize: "13px", margin: "0 0 12px", textAlign: "center" }}>{authError}</p>}
-          <button onClick={handleAuth}
-            style={{ width: "100%", padding: "15px", background: "linear-gradient(135deg, #F97316, #8B5CF6)", border: "none", borderRadius: "12px", color: "#fff", fontSize: "14px", fontWeight: "600", cursor: "pointer", fontFamily: "inherit" }}>
-            {authMode === "login" ? "Einloggen →" : "Account erstellen →"}
+        <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "24px", padding: "28px" }}>
+          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px", textAlign: "center", margin: "0 0 16px" }}>Gib deinen Zugangscode ein</p>
+          <input value={codeInput} onChange={e => { setCodeInput(e.target.value); setCodeError(false); }} onKeyDown={e => e.key === "Enter" && handleCodeLogin()} placeholder="DEIN CODE" 
+            style={{ width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.06)", border: `1px solid ${codeError ? "#F87171" : "rgba(255,255,255,0.1)"}`, borderRadius: "12px", color: "#fff", fontSize: "16px", textAlign: "center", letterSpacing: "4px", outline: "none", fontFamily: "inherit", marginBottom: "10px" }} />
+          {codeError && <p style={{ color: "#F87171", fontSize: "12px", textAlign: "center", margin: "0 0 10px" }}>❌ Ungültiger Code</p>}
+          <button onClick={handleCodeLogin} style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg, #F97316, #8B5CF6)", border: "none", borderRadius: "12px", color: "#fff", fontSize: "14px", fontWeight: "600", cursor: "pointer", fontFamily: "inherit" }}>
+            Einloggen →
           </button>
         </div>
-        <p style={{ color: "rgba(255,255,255,0.2)", fontSize: "11px", textAlign: "center", marginTop: "20px" }}>Kein Account? Kontaktiere uns für Zugang.</p>
+        <p style={{ color: "rgba(255,255,255,0.2)", fontSize: "11px", textAlign: "center", marginTop: "16px" }}>Kein Code? Kontaktiere uns für Zugang.</p>
       </div>
     </div>
   );
@@ -752,7 +770,7 @@ export default function App() {
           {saveMsg && <span style={{ fontSize: "11px", color: saveMsg.startsWith("✓") ? "#10B981" : "#F87171", background: "rgba(255,255,255,0.1)", padding: "4px 10px", borderRadius: "20px" }}>{saveMsg}</span>}
           <button onClick={() => setShowFeedback(true)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "20px", padding: "6px 12px", fontSize: "11px", cursor: "pointer" }}>💬 Feedback</button>
           <button onClick={() => setShowGuide(true)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "20px", padding: "6px 12px", fontSize: "11px", cursor: "pointer" }}>❓ Hilfe</button>
-          <button onClick={() => supabase.auth.signOut()} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(255,255,255,0.4)", borderRadius: "20px", padding: "6px 12px", fontSize: "11px", cursor: "pointer" }}>Logout</button>
+          <button onClick={handleLogout} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(255,255,255,0.4)", borderRadius: "20px", padding: "6px 12px", fontSize: "11px", cursor: "pointer" }}>Logout</button>
         </div>
       </div>
 
