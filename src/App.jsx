@@ -617,7 +617,7 @@ export default function App() {
             {["login","signup"].map(mode => (
               <button key={mode} onClick={() => { setAuthMode(mode); setAuthError(""); }}
                 style={{ flex: 1, padding: "10px", border: "none", borderRadius: "9px", cursor: "pointer", fontSize: "13px", fontWeight: "500", fontFamily: "inherit", background: authMode === mode ? "rgba(255,255,255,0.12)" : "transparent", color: authMode === mode ? "#fff" : "rgba(255,255,255,0.4)", transition: "all 0.2s" }}>
-                {mode === "login" ? "Einloggen" : "Registrieren"}
+                {mode === "login" ? "Einloggen" 
               </button>
             ))}
           </div>
